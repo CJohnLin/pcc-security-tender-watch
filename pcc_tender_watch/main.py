@@ -80,6 +80,7 @@ def _resolve_open_tenders(candidates: dict[TenderKey, list[str]], now: dt.dateti
             {
                 "categories": categories,
                 "agency": detail.get("機關資料:機關名稱", ""),
+                "case_number": detail.get("採購資料:標案案號", ""),
                 "title": detail.get("採購資料:標案名稱", ""),
                 "announce_date": detail.get("招標資料:公告日", ""),
                 "deadline": detail.get("領投開標:截止投標", ""),
