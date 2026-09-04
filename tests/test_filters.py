@@ -34,14 +34,41 @@ def test_parse_roc_datetime_invalid_returns_none():
 
 def test_is_still_open_true_when_deadline_in_future():
     now = dt.datetime(2026, 9, 4, 9, 0)
-    detail = {"領投開標:截止投標": "115/09/15 09:00"}
-    assert filters.is_still_open(detail, now) is True
+    assert filters.is_still_open("115/09/15 09:00", now) is True
 
 
 def test_is_still_open_false_when_deadline_passed():
     now = dt.datetime(2026, 9, 4, 9, 0)
-    detail = {"領投開標:截止投標": "115/08/01 09:00"}
-    assert filters.is_still_open(detail, now) is False
+    assert filters.is_still_open("115/08/01 09:00", now) is False
+
+
+def test_is_still_open_false_when_no_deadline():
+    now = dt.datetime(2026, 9, 4, 9, 0)
+    assert filters.is_still_open("", now) is False
+
+
+def test_parse_roc_period_end_single_date_matches_datetime():
+    assert filters.parse_roc_period_end("115/09/15 09:00") == dt.datetime(2026, 9, 15, 9, 0)
+
+
+def test_parse_roc_period_end_range_takes_last_date():
+    # RFI（公開徵求廠商提供參考資料公告）用的「起－迄」區間格式
+    assert filters.parse_roc_period_end("115/09/03 － 115/09/11") == dt.datetime(2026, 9, 11, 0, 0)
+
+
+def test_parse_roc_period_end_invalid_returns_none():
+    assert filters.parse_roc_period_end("") is None
+    assert filters.parse_roc_period_end("not a date") is None
+
+
+def test_is_still_open_true_for_rfi_period_not_yet_ended():
+    now = dt.datetime(2026, 9, 4, 9, 0)
+    assert filters.is_still_open("115/09/03 － 115/09/11", now) is True
+
+
+def test_is_still_open_false_for_rfi_period_already_ended():
+    now = dt.datetime(2026, 9, 20, 9, 0)
+    assert filters.is_still_open("115/09/03 － 115/09/11", now) is False
 
 
 def test_is_security_sensitive():

@@ -16,11 +16,12 @@ pre{white-space:pre-wrap;background:#fff3f3;border:1px solid #e0a0a0;padding:12p
 
 _COLUMNS = [
     ("categories", "分類"),
+    ("stage", "階段"),
     ("agency", "機關名稱"),
     ("case_number", "標案案號"),
     ("title", "標案名稱"),
     ("announce_date", "公告日"),
-    ("deadline", "截止投標"),
+    ("deadline", "截止投標/徵求期限"),
     ("open_time", "開標時間"),
     ("budget", "預算金額"),
 ]

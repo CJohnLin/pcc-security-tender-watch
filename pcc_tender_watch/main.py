@@ -61,8 +61,37 @@ def _collect_candidates(now: dt.datetime) -> dict[TenderKey, list[str]]:
     return candidates
 
 
+# 正式招標公告跟「公開徵求廠商提供參考資料公告」（RFI，還沒進入正式招標程序的市場調查）
+# 用的是兩套完全不同的欄位命名（前綴分別是「機關資料/採購資料/招標資料/領投開標」跟「標案內容」）。
+# 用別名清單依序找，抓到第一個有值的就用；RFI 沒有預算金額、也沒有分開的截止投標/開標時間，
+# 這些欄位就會維持空字串，是預期行為、不是漏抓。
+_FIELD_ALIASES = {
+    "agency": ["機關資料:機關名稱", "標案內容:機關名稱"],
+    "case_number": ["採購資料:標案案號", "標案內容:標案案號"],
+    "title": ["採購資料:標案名稱", "標案內容:標案名稱"],
+    "announce_date": ["招標資料:公告日", "標案內容:公告日期"],
+    "budget": ["採購資料:預算金額"],
+    "open_time": ["領投開標:開標時間"],
+}
+# 期限欄位語意不同（截止投標是單一時間點，公開徵求期間是「起－迄」區間），
+# 但 filters.is_still_open / parse_roc_period_end 兩種格式都吃得下，所以用同一套別名找法即可。
+_DEADLINE_ALIASES = ["領投開標:截止投標", "標案內容:公開徵求期間"]
+
+
+def _first_present(detail: dict, keys: list[str]) -> str:
+    for key in keys:
+        value = detail.get(key)
+        if value:
+            return value
+    return ""
+
+
+def _stage_label(brief_type: str) -> str:
+    return "徵求" if "徵求" in brief_type else "招標"
+
+
 def _resolve_open_tenders(candidates: dict[TenderKey, list[str]], now: dt.datetime) -> list[dict]:
-    """對每個候選標案抓完整資料，過濾掉已決標/已截止的，回傳依截止投標時間排序好的清單。"""
+    """對每個候選標案抓完整資料，過濾掉已決標/已過期的，回傳依期限排序好的清單。"""
     tenders = []
     for (unit_id, job_number), categories in candidates.items():
         result = pcc_client.get_tender_detail(unit_id, job_number)
@@ -70,7 +99,8 @@ def _resolve_open_tenders(candidates: dict[TenderKey, list[str]], now: dt.dateti
             continue
 
         detail = result["detail"]
-        if not filters.is_still_open(detail, now):
+        deadline = _first_present(detail, _DEADLINE_ALIASES)
+        if not filters.is_still_open(deadline, now):
             continue
 
         if filters.is_security_sensitive(detail) and "資安" not in categories:
@@ -79,17 +109,18 @@ def _resolve_open_tenders(candidates: dict[TenderKey, list[str]], now: dt.dateti
         tenders.append(
             {
                 "categories": categories,
-                "agency": detail.get("機關資料:機關名稱", ""),
-                "case_number": detail.get("採購資料:標案案號", ""),
-                "title": detail.get("採購資料:標案名稱", ""),
-                "announce_date": detail.get("招標資料:公告日", ""),
-                "deadline": detail.get("領投開標:截止投標", ""),
-                "open_time": detail.get("領投開標:開標時間", ""),
-                "budget": detail.get("採購資料:預算金額", ""),
+                "stage": _stage_label(result["brief_type"]),
+                "agency": _first_present(detail, _FIELD_ALIASES["agency"]),
+                "case_number": _first_present(detail, _FIELD_ALIASES["case_number"]),
+                "title": _first_present(detail, _FIELD_ALIASES["title"]),
+                "announce_date": _first_present(detail, _FIELD_ALIASES["announce_date"]),
+                "deadline": deadline,
+                "open_time": _first_present(detail, _FIELD_ALIASES["open_time"]),
+                "budget": _first_present(detail, _FIELD_ALIASES["budget"]),
             }
         )
 
-    tenders.sort(key=lambda t: filters.parse_roc_datetime(t["deadline"]) or dt.datetime.max)
+    tenders.sort(key=lambda t: filters.parse_roc_period_end(t["deadline"]) or dt.datetime.max)
     return tenders
 
 
