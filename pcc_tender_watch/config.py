@@ -1,4 +1,4 @@
-"""這支程式的設定值。實際憑證一律從環境變數讀入，不寫死在程式碼裡。"""
+"""這支程式的設定值。沒有任何一項是必填，預設值就能直接跑（見 docs/adr/0002）。"""
 
 import os
 
@@ -7,18 +7,15 @@ PCC_API_BASE = "https://pcc-api.openfun.app/api"
 PCC_API_TOKEN = os.environ.get("PCC_API_TOKEN", "")
 
 # 每次 API 請求之間的間隔秒數。實測沒有 Token 時，間隔 2 秒不會觸發 g0v API 未公開的流量限制；
-# 間隔太短（例如完全不等）會很快被 429 擋下來。
+# 間隔太短（例如完全不等）會很快被 429 擋下來。這是本機執行才有效的數字，見 ADR-0002：
+# GitHub Actions 這類資料中心 IP 直接被 403 擋掉，跟間隔無關。
 REQUEST_DELAY_SECONDS = float(os.environ.get("REQUEST_DELAY_SECONDS", "2"))
 
 # 每次執行往回掃幾天的公告，見 docs/adr/0001-use-g0v-pcc-api.md 的抓取策略說明。
 LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "90"))
 
-# 寄信用的憑證刻意用 .get()、不在 import 時就要求存在：這樣純邏輯（filters/report）
-# 才能在沒有設定任何寄信憑證的環境（例如本機跑單元測試）下被 import 與測試。
-# 真的要寄信時（mailer.send_email）才會檢查這幾個值存不存在。
-GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
-GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
-RECIPIENT_EMAIL = os.environ.get("RECIPIENT_EMAIL") or GMAIL_ADDRESS
+# 結果 HTML 檔案要存去哪個資料夾（相對於執行時的工作目錄）。
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 
 # 標案「名稱」關鍵字同義詞。對應 CONTEXT.md 的「資安類」「網路設備類」定義。
 # 同一個標案可以同時命中多個分類。

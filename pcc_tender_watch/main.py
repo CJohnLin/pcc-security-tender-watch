@@ -1,18 +1,35 @@
-"""每天執行一次的進入點：
+"""手動執行的進入點：
 
 抓政府電子採購網「資安」「網路設備」相關、目前還在投標期限內（尚未決標）的標案，
-整理成 HTML 表格 Email 通知。查詢過程中任何一步失敗，改寄一封失敗通知信，並讓程式
-以非零結束碼結束，讓 GitHub Actions 那次執行也顯示失敗（雙重提醒，不只靠 email）。
+輸出成本機 HTML 檔（見 docs/adr/0002-local-manual-exe-instead-of-cloud-schedule.md），
+並自動用預設瀏覽器開啟。結尾會等使用者按 Enter 才結束，這樣打包成 .exe 雙擊執行時，
+視窗不會在讀完結果前就自己關掉。
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import os
 import sys
+import webbrowser
 
-from . import config, filters, mailer, pcc_client, report
+from . import config, filters, pcc_client, report
 
 TenderKey = tuple[str, str]
+
+
+def _fix_windows_console_encoding() -> None:
+    """Windows 主控台預設用系統代碼頁（cp950/cp437 等），直接印中文會變亂碼。
+
+    切成 UTF-8 代碼頁並讓 stdout/stderr 改用 UTF-8 輸出，雙擊 .exe 或用 cmd.exe
+    執行時中文才會正常顯示。非 Windows、或非終端機（沒有 stdout）時直接跳過。
+    """
+    if sys.platform != "win32":
+        return
+    os.system("chcp 65001 >NUL 2>&1")
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def _collect_candidates(now: dt.datetime) -> dict[TenderKey, list[str]]:
@@ -81,23 +98,41 @@ def run(now: dt.datetime | None = None) -> list[dict]:
     return _resolve_open_tenders(candidates, now)
 
 
+def _write_html(html_content: str, run_time: dt.datetime) -> str:
+    os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+    filename = f"tenders_{run_time.strftime('%Y%m%d_%H%M%S')}.html"
+    path = os.path.join(config.OUTPUT_DIR, filename)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+    return os.path.abspath(path)
+
+
+def _pause() -> None:
+    try:
+        input("\n按 Enter 鍵結束...")
+    except EOFError:
+        pass
+
+
 def main() -> None:
+    _fix_windows_console_encoding()
+
     now = dt.datetime.now()
-    run_date = now.strftime("%Y-%m-%d")
+    run_time_label = now.strftime("%Y-%m-%d %H:%M")
 
     try:
         tenders = run(now)
-    except Exception as exc:  # noqa: BLE001 - 故意攔截所有例外，改寄失敗通知信
-        mailer.send_email(
-            f"[政府標案通知] {run_date} 查詢失敗",
-            report.build_failure_html(run_date, str(exc)),
-        )
+    except Exception as exc:  # noqa: BLE001 - 故意攔截所有例外，改輸出失敗頁面
+        path = _write_html(report.build_failure_html(run_time_label, str(exc)), now)
+        print(f"查詢失敗，錯誤已寫入：{path}", file=sys.stderr)
+        webbrowser.open(f"file://{path}")
+        _pause()
         raise
 
-    mailer.send_email(
-        f"[政府標案通知] {run_date} 資安/網路設備標案 {len(tenders)} 件",
-        report.build_success_html(tenders, run_date),
-    )
+    path = _write_html(report.build_report_html(tenders, run_time_label), now)
+    print(f"完成，共找到 {len(tenders)} 筆標案，結果已寫入：{path}")
+    webbrowser.open(f"file://{path}")
+    _pause()
 
 
 if __name__ == "__main__":
