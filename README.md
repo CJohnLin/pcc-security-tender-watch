@@ -26,10 +26,11 @@ git remote add origin https://github.com/<你的帳號>/pcc-security-tender-watc
 git push -u origin main
 ```
 
-### 2. 申請 g0v API 的 Bearer Token
+### 2.（選填）申請 g0v API 的 Bearer Token
 
-1. 前往 https://data.openfun.tw/user，用 Google 帳號登入
-2. 在 Dashboard 取得長效 API 金鑰
+目前 https://data.openfun.tw/user 的 API Token 申請需要在邀請名單內才能取得，一般使用者申請不到，**先跳過這一步也完全可以跑**。
+
+沒有 Token 時，程式靠 `pcc_client.py` 內建的請求節流（預設每次 API 呼叫間隔 2 秒，見 `REQUEST_DELAY_SECONDS`）避開 g0v API 未公開的流量限制，已經實測驗證過穩定不會被擋。之後如果拿到 Token 了，設定 `PCC_API_TOKEN` 這個 Secret 即可，不需要改程式碼。
 
 ### 3. 申請 Gmail 應用程式密碼
 
@@ -41,10 +42,10 @@ git push -u origin main
 
 | Secret | 說明 |
 |---|---|
-| `PCC_API_TOKEN` | 步驟 2 拿到的 g0v API Token |
 | `GMAIL_ADDRESS` | 用來寄信的 Gmail 地址 |
 | `GMAIL_APP_PASSWORD` | 步驟 3 拿到的應用程式密碼 |
 | `RECIPIENT_EMAIL` | 收件信箱（選填，沒設就寄回 `GMAIL_ADDRESS`） |
+| `PCC_API_TOKEN` | 選填，只有拿到步驟 2 的邀請才需要設 |
 
 ### 5. 排程會自動生效
 
@@ -74,5 +75,8 @@ pytest
 ## 已知限制
 
 - 依賴非官方、社群維運的第三方 API（g0v `pcc-api.openfun.app`），該服務中斷或改版時本程式需要跟著調整，見 [ADR-0001](docs/adr/0001-use-g0v-pcc-api.md)。
+- API 的 Bearer Token 目前需要邀請才能申請，一般使用者拿不到；程式改用請求節流因應，實測穩定，但代表沒有官方保證的流量額度，未來這個未公開限制如果收緊，節流間隔可能要跟著調大（`REQUEST_DELAY_SECONDS`）。
+- `listbydate` 在完全沒有公告的日期（例如假日）會回傳夾雜 PHP 警告文字的壞掉 JSON（第三方 API 本身的 bug），程式會把那一天當作沒有資料、印警告後跳過，不會讓整次執行失敗。
 - 篩選仍以「標案名稱」關鍵字比對為主，名稱裡完全沒出現任何關鍵字/同義詞的資安相關標案會被漏掉；`detail` 裡官方的「國安/資安疑慮」旗標只用來補標分類，沒有用來擴大候選名單（那需要對每天所有公告都呼叫一次 `/api/tender`，成本太高）。
+- 因為節流限速，90 天回溯視窗完整跑一次大約需要 10～15 分鐘（實測 10 天約 3 分鐘），對每天一次的排程來說沒有問題。
 - 該 API 的完整資料授權條款尚未能確認清楚，個人使用應無虞，但不建議直接拿通知內容做商業轉載。

@@ -3,7 +3,12 @@
 import os
 
 PCC_API_BASE = "https://pcc-api.openfun.app/api"
+# 選填：g0v API 目前需要邀請名單才能申請 Token，沒有也能跑（見 REQUEST_DELAY_SECONDS 節流）。
 PCC_API_TOKEN = os.environ.get("PCC_API_TOKEN", "")
+
+# 每次 API 請求之間的間隔秒數。實測沒有 Token 時，間隔 2 秒不會觸發 g0v API 未公開的流量限制；
+# 間隔太短（例如完全不等）會很快被 429 擋下來。
+REQUEST_DELAY_SECONDS = float(os.environ.get("REQUEST_DELAY_SECONDS", "2"))
 
 # 每次執行往回掃幾天的公告，見 docs/adr/0001-use-g0v-pcc-api.md 的抓取策略說明。
 LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "90"))
@@ -31,10 +36,19 @@ KEYWORD_GROUPS: dict[str, list[str]] = {
     "網路設備": [
         "網路設備",
         "網通設備",
-        "交換器",
         "路由器",
         "無線基地台",
         "防火牆設備",
+        # 「交換器」單獨用太廣，會誤中「熱交換器」這種工業設備（實測發現的真實案例），
+        # 改列出具體的網路交換器複合詞，兼顧命中率與精確度。
+        "網路交換器",
+        "核心交換器",
+        "骨幹交換器",
+        "乙太網路交換器",
+        "光纖交換器",
+        "無線交換器",
+        "管理型交換器",
+        "PoE交換器",
     ],
 }
 

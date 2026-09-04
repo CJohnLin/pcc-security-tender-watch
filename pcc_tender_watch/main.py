@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import sys
 
 from . import config, filters, mailer, pcc_client, report
 
@@ -15,11 +16,20 @@ TenderKey = tuple[str, str]
 
 
 def _collect_candidates(now: dt.datetime) -> dict[TenderKey, list[str]]:
-    """掃過去 LOOKBACK_DAYS 天的公告列表，回傳 {(unit_id, job_number): 命中的分類} 的候選清單（已去重）。"""
+    """掃過去 LOOKBACK_DAYS 天的公告列表，回傳 {(unit_id, job_number): 命中的分類} 的候選清單（已去重）。
+
+    單一天查詢失敗（例如假日沒有公告時，g0v API 會回傳夾雜 PHP 警告文字的壞掉 JSON）
+    不會讓整次執行失敗：印出警告、當作那天沒有資料、繼續掃下一天。
+    """
     candidates: dict[TenderKey, list[str]] = {}
     for offset in range(config.LOOKBACK_DAYS):
         date_str = (now - dt.timedelta(days=offset)).strftime("%Y%m%d")
-        for record in pcc_client.list_by_date(date_str):
+        try:
+            records = pcc_client.list_by_date(date_str)
+        except RuntimeError as exc:
+            print(f"警告：{date_str} 查詢失敗，跳過這一天。原因：{exc}", file=sys.stderr)
+            continue
+        for record in records:
             brief = record.get("brief", {})
             if filters.is_excluded_announcement(brief.get("type", "")):
                 continue

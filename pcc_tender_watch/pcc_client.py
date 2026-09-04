@@ -25,6 +25,10 @@ def _get(path: str, **params: str) -> dict:
     url = f"{config.PCC_API_BASE}/{path}"
     last_error: Exception | None = None
     for attempt in range(_MAX_RETRIES):
+        # 節流：沒有 Bearer Token 時，g0v API 有一個沒公開數字的短時間流量限制，
+        # 實測每次請求間隔 config.REQUEST_DELAY_SECONDS（預設 2 秒）不會被 429 擋下來。
+        # 有 Token 的話這個限制會放寬，但延遲不高，先不特別為有無 Token 分兩套邏輯。
+        time.sleep(config.REQUEST_DELAY_SECONDS)
         try:
             response = _SESSION.get(url, params=params, timeout=_TIMEOUT_SECONDS)
             response.raise_for_status()
