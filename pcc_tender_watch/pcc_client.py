@@ -36,7 +36,7 @@ def _get(path: str, **params: str) -> dict:
         except requests.RequestException as exc:
             last_error = exc
             time.sleep(2**attempt)
-    raise RuntimeError(f"呼叫 g0v API 失敗：{url} {params}") from last_error
+    raise RuntimeError(f"呼叫 g0v API 失敗：{url} {params}｜{type(last_error).__name__}: {last_error}") from last_error
 
 
 def list_by_date(date: str) -> list[dict]:
