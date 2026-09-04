@@ -40,6 +40,8 @@ def _collect_candidates(now: dt.datetime) -> dict[TenderKey, list[str]]:
     """
     candidates: dict[TenderKey, list[str]] = {}
     for offset in range(config.LOOKBACK_DAYS):
+        if offset > 0 and offset % 10 == 0:
+            print(f"查詢進度：{offset}/{config.LOOKBACK_DAYS} 天...")
         date_str = (now - dt.timedelta(days=offset)).strftime("%Y%m%d")
         try:
             records = pcc_client.list_by_date(date_str)
@@ -93,7 +95,11 @@ def _stage_label(brief_type: str) -> str:
 def _resolve_open_tenders(candidates: dict[TenderKey, list[str]], now: dt.datetime) -> list[dict]:
     """對每個候選標案抓完整資料，過濾掉已決標/已過期的，回傳依期限排序好的清單。"""
     tenders = []
-    for (unit_id, job_number), categories in candidates.items():
+    total = len(candidates)
+    print(f"找到 {total} 個候選標案，開始查詢詳細資料...")
+    for i, ((unit_id, job_number), categories) in enumerate(candidates.items(), start=1):
+        if i > 1 and i % 10 == 0:
+            print(f"查詢進度：{i}/{total} 筆候選...")
         result = pcc_client.get_tender_detail(unit_id, job_number)
         if result is None or filters.is_excluded_announcement(result["brief_type"]):
             continue
@@ -151,6 +157,7 @@ def main() -> None:
 
     now = dt.datetime.now()
     run_time_label = now.strftime("%Y-%m-%d %H:%M")
+    print(f"開始查詢，結果會存到：{os.path.abspath(config.OUTPUT_DIR)}（往回掃 {config.LOOKBACK_DAYS} 天，可能需要幾分鐘）")
 
     try:
         tenders = run(now)

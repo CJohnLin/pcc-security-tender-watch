@@ -33,6 +33,12 @@ def _get(path: str, **params: str) -> dict:
             response = _SESSION.get(url, params=params, timeout=_TIMEOUT_SECONDS)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.JSONDecodeError as exc:
+            # 常見於完全沒有公告的日期：這個第三方 API 本身的 bug 會把 PHP 警告文字
+            # 混進本來要回傳的 JSON 裡，導致解析失敗。這種失敗不是暫時性的（同一個
+            # 日期重打幾次結果都一樣），重試沒有意義，直接放棄、不浪費時間等待。
+            last_error = exc
+            break
         except requests.RequestException as exc:
             last_error = exc
             time.sleep(2**attempt)
