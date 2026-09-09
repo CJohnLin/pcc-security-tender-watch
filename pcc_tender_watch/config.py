@@ -17,6 +17,23 @@ LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "90"))
 # 結果 HTML 檔案要存去哪個資料夾（相對於執行時的工作目錄）。
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 
+# UNATTENDED=1 時（Windows 工作排程器排程執行）：不開瀏覽器、不等使用者按 Enter，
+# 改成呼叫 Gmail API 建立一封草稿信（不會寄出）。見 docs/adr/0003。
+UNATTENDED = os.environ.get("UNATTENDED", "").strip() == "1"
+
+# Gmail OAuth 憑證檔案路徑。credentials.json 是 Google Cloud Console 下載的用戶端 ID，
+# token.json 是第一次互動式登入後快取的授權，之後排程執行會靜默用它刷新，不會再跳瀏覽器。
+# 兩個檔案都含機密資訊，已加進 .gitignore，不會進版控。
+GOOGLE_CREDENTIALS_PATH = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+GOOGLE_TOKEN_PATH = os.environ.get("GOOGLE_TOKEN_PATH", "token.json")
+
+DRAFT_TO = ["peggy.wu@rehfeldt.org"]
+DRAFT_CC = ["supportlf@rehfeldt.org"]
+
+# {date_code} 會換成當天日期，格式如 "SEP09"（月份縮寫大寫＋兩位數日期）。
+DRAFT_SUBJECT_TEMPLATE = "{date_code} Tender Research"
+DRAFT_BODY = "Hi Peggy:\nHere is the list of current tenders that expired from today."
+
 # 標案「名稱」關鍵字同義詞。對應 CONTEXT.md 的「資安類」「網路設備類」定義。
 # 同一個標案可以同時命中多個分類。
 KEYWORD_GROUPS: dict[str, list[str]] = {

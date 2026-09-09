@@ -6,3 +6,6 @@ output/
 build/
 dist/
 *.spec
+credentials.json
+token.json
+run_unattended.bat

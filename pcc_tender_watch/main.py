@@ -1,9 +1,12 @@
-"""手動執行的進入點：
+"""進入點，兩種模式：
 
-抓政府電子採購網「資安」「網路設備」相關、目前還在投標期限內（尚未決標）的標案，
-輸出成本機 HTML 檔（見 docs/adr/0002-local-manual-exe-instead-of-cloud-schedule.md），
-並自動用預設瀏覽器開啟。結尾會等使用者按 Enter 才結束，這樣打包成 .exe 雙擊執行時，
-視窗不會在讀完結果前就自己關掉。
+互動模式（預設）：抓政府電子採購網「資安」「網路設備」相關、目前還在投標期限內
+（尚未決標）的標案，輸出成本機 HTML 檔並自動用預設瀏覽器開啟，結尾等使用者按
+Enter 才結束（打包成 .exe 雙擊執行時，視窗不會在讀完結果前就自己關掉）。
+
+無人值守模式（環境變數 UNATTENDED=1，給 Windows 工作排程器排程用）：不開瀏覽器、
+不等按鍵，改成呼叫 Gmail API 建立一封草稿信（不會寄出，HTML 以附件夾帶）。
+見 docs/adr/0003-unattended-mode-and-gmail-draft.md。
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ import os
 import sys
 import webbrowser
 
-from . import config, filters, pcc_client, report
+from . import config, filters, gmail_draft, pcc_client, report
 
 TenderKey = tuple[str, str]
 
@@ -164,14 +167,29 @@ def main() -> None:
     except Exception as exc:  # noqa: BLE001 - 故意攔截所有例外，改輸出失敗頁面
         path = _write_html(report.build_failure_html(run_time_label, str(exc)), now)
         print(f"查詢失敗，錯誤已寫入：{path}", file=sys.stderr)
-        webbrowser.open(f"file://{path}")
-        _pause()
+        if not config.UNATTENDED:
+            webbrowser.open(f"file://{path}")
+            _pause()
+        # 無人值守模式失敗時不建立草稿（沒有結果可附），靠非零結束碼讓工作排程器
+        # 的執行紀錄顯示失敗，本機也還是留了失敗頁面方便事後排查。
         raise
 
     path = _write_html(report.build_report_html(tenders, run_time_label), now)
     print(f"完成，共找到 {len(tenders)} 筆標案，結果已寫入：{path}")
-    webbrowser.open(f"file://{path}")
-    _pause()
+
+    if config.UNATTENDED:
+        date_code = now.strftime("%b%d").upper()
+        draft_id = gmail_draft.create_draft(
+            to=config.DRAFT_TO,
+            cc=config.DRAFT_CC,
+            subject=config.DRAFT_SUBJECT_TEMPLATE.format(date_code=date_code),
+            body_text=config.DRAFT_BODY,
+            attachment_path=path,
+        )
+        print(f"草稿已建立，Draft ID：{draft_id}")
+    else:
+        webbrowser.open(f"file://{path}")
+        _pause()
 
 
 if __name__ == "__main__":
