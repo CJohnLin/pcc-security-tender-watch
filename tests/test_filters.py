@@ -86,6 +86,7 @@ _FAKE_CALENDAR = [
     {"date": "20261010", "week": "六", "isHoliday": True, "description": "國慶日"},
     {"date": "20261011", "week": "日", "isHoliday": True, "description": ""},
     {"date": "20261012", "week": "一", "isHoliday": False, "description": ""},
+    {"date": "20261017", "week": "六", "isHoliday": False, "description": "補班"},
 ]
 
 
@@ -96,23 +97,28 @@ def _mock_calendar_response():
     return response
 
 
-def test_is_taiwan_holiday_true_for_named_holiday():
+def test_is_non_working_day_true_for_named_holiday():
     with patch("pcc_tender_watch.filters.requests.get", return_value=_mock_calendar_response()):
-        assert filters.is_taiwan_holiday(dt.date(2026, 10, 10)) is True
+        assert filters.is_non_working_day(dt.date(2026, 10, 10)) is True
 
 
-def test_is_taiwan_holiday_false_for_plain_weekend():
-    # isHoliday=true 但沒有 description，是單純週末，不算「國定假日」
+def test_is_non_working_day_true_for_plain_weekend():
     with patch("pcc_tender_watch.filters.requests.get", return_value=_mock_calendar_response()):
-        assert filters.is_taiwan_holiday(dt.date(2026, 10, 11)) is False
+        assert filters.is_non_working_day(dt.date(2026, 10, 11)) is True
 
 
-def test_is_taiwan_holiday_false_for_ordinary_workday():
+def test_is_non_working_day_false_for_ordinary_workday():
     with patch("pcc_tender_watch.filters.requests.get", return_value=_mock_calendar_response()):
-        assert filters.is_taiwan_holiday(dt.date(2026, 10, 12)) is False
+        assert filters.is_non_working_day(dt.date(2026, 10, 12)) is False
 
 
-def test_is_taiwan_holiday_false_when_fetch_fails():
+def test_is_non_working_day_false_for_makeup_workday_saturday():
+    # 補班日：星期六但 isHoliday=false，一樣要照常執行
+    with patch("pcc_tender_watch.filters.requests.get", return_value=_mock_calendar_response()):
+        assert filters.is_non_working_day(dt.date(2026, 10, 17)) is False
+
+
+def test_is_non_working_day_false_when_fetch_fails():
     # 抓不到官方資料時保守回傳 False，不無故跳過查詢
     with patch("pcc_tender_watch.filters.requests.get", side_effect=requests.RequestException("boom")):
-        assert filters.is_taiwan_holiday(dt.date(2026, 10, 10)) is False
+        assert filters.is_non_working_day(dt.date(2026, 10, 10)) is False

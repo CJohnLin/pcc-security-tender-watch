@@ -160,8 +160,8 @@ def main() -> None:
 
     now = dt.datetime.now()
 
-    if config.UNATTENDED and filters.is_taiwan_holiday(now.date()):
-        print(f"{now.date()} 是台灣國定假日，無人值守模式不觸發，直接結束。")
+    if config.UNATTENDED and filters.is_non_working_day(now.date()):
+        print(f"{now.date()} 是假日（週末或國定假日），無人值守模式不觸發，直接結束。")
         return
 
     run_time_label = now.strftime("%Y-%m-%d %H:%M")
