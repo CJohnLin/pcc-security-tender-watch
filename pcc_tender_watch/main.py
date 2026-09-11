@@ -159,6 +159,11 @@ def main() -> None:
     _fix_windows_console_encoding()
 
     now = dt.datetime.now()
+
+    if config.UNATTENDED and filters.is_taiwan_holiday(now.date()):
+        print(f"{now.date()} 是台灣國定假日，無人值守模式不觸發，直接結束。")
+        return
+
     run_time_label = now.strftime("%Y-%m-%d %H:%M")
     print(f"開始查詢，結果會存到：{os.path.abspath(config.OUTPUT_DIR)}（往回掃 {config.LOOKBACK_DAYS} 天，可能需要幾分鐘）")
 

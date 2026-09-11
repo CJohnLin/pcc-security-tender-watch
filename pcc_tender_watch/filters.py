@@ -5,7 +5,15 @@ from __future__ import annotations
 import datetime as dt
 import re
 
+import requests
+
 from . import config
+
+# 行政院人事行政總處公告的政府行政機關辦公日曆表，整理成逐日 JSON 的社群鏡像
+# （來源：https://github.com/ruyut/TaiwanCalendar）。每天都有一筆記錄；純週末
+# isHoliday 也是 true 但 description 是空字串，只有真的有名稱的國定假日/補假
+# 才會有 description，藉此跟「單純週末」區分開來。
+_TW_CALENDAR_URL = "https://raw.githubusercontent.com/ruyut/TaiwanCalendar/master/data/{year}.json"
 
 _ROC_DATETIME_RE = re.compile(r"(\d{2,3})/(\d{1,2})/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?")
 
@@ -71,3 +79,23 @@ def is_still_open(deadline_text: str, now: dt.datetime) -> bool:
 def is_security_sensitive(detail: dict) -> bool:
     """官方欄位本身的「國安/資安疑慮」旗標，命中就額外算資安類（見 config.SECURITY_SENSITIVE_FIELD）。"""
     return detail.get(config.SECURITY_SENSITIVE_FIELD, "") == "是"
+
+
+def is_taiwan_holiday(date: dt.date) -> bool:
+    """依行政院人事行政總處公告判斷是不是台灣的國定假日（含農曆節日與補假，不含純週末、不含補班日）。
+
+    抓不到官方資料（網路問題等）時保守回傳 False，不無故跳過當天的查詢——
+    寧可多跑一次沒有必要的查詢，也不要因為抓不到假日資料而漏掉真正的工作日。
+    """
+    try:
+        response = requests.get(_TW_CALENDAR_URL.format(year=date.year), timeout=10)
+        response.raise_for_status()
+        calendar = response.json()
+    except (requests.RequestException, ValueError):
+        return False
+
+    date_str = date.strftime("%Y%m%d")
+    for entry in calendar:
+        if entry.get("date") == date_str:
+            return bool(entry.get("isHoliday")) and bool(entry.get("description", "").strip())
+    return False

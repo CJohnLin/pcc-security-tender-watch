@@ -1,4 +1,7 @@
 import datetime as dt
+from unittest.mock import Mock, patch
+
+import requests
 
 from pcc_tender_watch import filters
 
@@ -76,3 +79,40 @@ def test_is_security_sensitive():
     assert filters.is_security_sensitive({field: "是"}) is True
     assert filters.is_security_sensitive({field: "否"}) is False
     assert filters.is_security_sensitive({}) is False
+
+
+_FAKE_CALENDAR = [
+    {"date": "20261009", "week": "五", "isHoliday": True, "description": "補假"},
+    {"date": "20261010", "week": "六", "isHoliday": True, "description": "國慶日"},
+    {"date": "20261011", "week": "日", "isHoliday": True, "description": ""},
+    {"date": "20261012", "week": "一", "isHoliday": False, "description": ""},
+]
+
+
+def _mock_calendar_response():
+    response = Mock()
+    response.raise_for_status = Mock()
+    response.json = Mock(return_value=_FAKE_CALENDAR)
+    return response
+
+
+def test_is_taiwan_holiday_true_for_named_holiday():
+    with patch("pcc_tender_watch.filters.requests.get", return_value=_mock_calendar_response()):
+        assert filters.is_taiwan_holiday(dt.date(2026, 10, 10)) is True
+
+
+def test_is_taiwan_holiday_false_for_plain_weekend():
+    # isHoliday=true 但沒有 description，是單純週末，不算「國定假日」
+    with patch("pcc_tender_watch.filters.requests.get", return_value=_mock_calendar_response()):
+        assert filters.is_taiwan_holiday(dt.date(2026, 10, 11)) is False
+
+
+def test_is_taiwan_holiday_false_for_ordinary_workday():
+    with patch("pcc_tender_watch.filters.requests.get", return_value=_mock_calendar_response()):
+        assert filters.is_taiwan_holiday(dt.date(2026, 10, 12)) is False
+
+
+def test_is_taiwan_holiday_false_when_fetch_fails():
+    # 抓不到官方資料時保守回傳 False，不無故跳過查詢
+    with patch("pcc_tender_watch.filters.requests.get", side_effect=requests.RequestException("boom")):
+        assert filters.is_taiwan_holiday(dt.date(2026, 10, 10)) is False
