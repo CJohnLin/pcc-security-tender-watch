@@ -21,6 +21,11 @@ OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 # 改成呼叫 Gmail API 建立一封草稿信（不會寄出）。見 docs/adr/0003。
 UNATTENDED = os.environ.get("UNATTENDED", "").strip() == "1"
 
+# 排程改成「登入時觸發」（不是固定 8:00），所以由程式自己決定要不要真的執行：
+# 現在時間要 >= 這個小時數才跑，且今天已經成功執行過一次就不重複跑（見 ADR-0004）。
+EARLIEST_RUN_HOUR = int(os.environ.get("EARLIEST_RUN_HOUR", "8"))
+LAST_SUCCESS_MARKER_PATH = os.environ.get("LAST_SUCCESS_MARKER_PATH", "last_success_date.txt")
+
 # Gmail OAuth 憑證檔案路徑。credentials.json 是 Google Cloud Console 下載的用戶端 ID，
 # token.json 是第一次互動式登入後快取的授權，之後排程執行會靜默用它刷新，不會再跳瀏覽器。
 # 兩個檔案都含機密資訊，已加進 .gitignore，不會進版控。

@@ -3,13 +3,13 @@
 查詢政府電子採購網，找出跟「資安」「網路設備」相關、目前還在投標期限內（尚未決標）的標案。有兩種執行模式：
 
 - **互動模式**：手動雙擊執行，輸出成本機 HTML 檔並自動用瀏覽器打開
-- **無人值守模式**：Windows 工作排程器每天 8:00 自動執行，完成後在 Gmail 建立一封**草稿**（不會寄出），HTML 報表以附件夾帶，收件人 peggy.wu@rehfeldt.org、副本 supportlf@rehfeldt.org。假日（依行政院人事行政總處公告，含週末、國定假日、補假；補班日不算）不觸發
+- **無人值守模式**：Windows 工作排程器在**登入電腦時**觸發（不是固定時間點，見 [ADR-0004](docs/adr/0004-login-triggered-instead-of-fixed-time.md)），程式自己判斷現在該不該真的執行——時間要 ≥ 8:00、今天還沒成功執行過、且不是假日（依行政院人事行政總處公告，含週末、國定假日、補假；補班日不算）——都符合才會真的查詢，完成後在 Gmail 建立一封**草稿**（不會寄出），HTML 報表以附件夾帶，收件人 peggy.wu@rehfeldt.org、副本 supportlf@rehfeldt.org
 
 設計決策見 [`CONTEXT.md`](CONTEXT.md)（詞彙定義）與 [`docs/adr/`](docs/adr/)（架構決策記錄）。
 
 ## 運作方式
 
-1. 無人值守模式：先檢查今天是不是假日（週末/國定假日），是的話直接結束，不執行以下步驟
+1. 無人值守模式：先檢查今天是否已經成功執行過、現在時間是否 ≥ 8:00、今天是不是假日（週末/國定假日）——任一條件不符就直接結束，不執行以下步驟
 2. 用 [g0v 政府採購公告 API](https://pcc-api.openfun.app/skill.md) 掃過去 90 天（可調）的公告列表
 3. 用標題比對「資安」「網路設備」關鍵字與同義詞（見 [`pcc_tender_watch/config.py`](pcc_tender_watch/config.py)）
 4. 排除決標/無法決標/廢標等公告，只留還在投標期限內的
@@ -21,7 +21,8 @@
 ## 架構決策摘要
 
 - **為什麼不是雲端排程（GitHub Actions）**：實測發現雲端機房 IP 會被 g0v API 的 Cloudflare 防護直接 403 擋掉，只能在本機（住宅/公司網路）執行，見 [ADR-0002](docs/adr/0002-local-manual-exe-instead-of-cloud-schedule.md)。
-- **為什麼是 Windows 工作排程器 + 獨立 Gmail API，不是 Claude 排程任務**：Claude 本機排程任務需要應用程式開著才會準時觸發、也無法應付電腦睡眠；Windows 工作排程器可以設定「喚醒電腦來執行」且不依賴任何應用程式，代價是要另外申請一組獨立的 Gmail OAuth 憑證（見下方設定），不能直接用 Claude 裡已設定好的 Gmail 連接器（連接器只有 Claude session 主動執行時才能呼叫），見 [ADR-0003](docs/adr/0003-unattended-mode-and-gmail-draft.md)。
+- **為什麼是 Windows 工作排程器 + 獨立 Gmail API，不是 Claude 排程任務**：Claude 本機排程任務需要應用程式開著才會準時觸發、也無法應付電腦睡眠；Windows 工作排程器不依賴任何應用程式，代價是要另外申請一組獨立的 Gmail OAuth 憑證（見下方設定），不能直接用 Claude 裡已設定好的 Gmail 連接器（連接器只有 Claude session 主動執行時才能呼叫），見 [ADR-0003](docs/adr/0003-unattended-mode-and-gmail-draft.md)。
+- **為什麼是「登入時觸發」，不是固定每天 8:00**：這台網域帳號的電腦，「只有登入時才執行」的固定時間排程一旦電腦登出就完全不會補跑；改成「不論登入與否均執行」需要本機「以批次工作登入」權限，而這台機器由網域集中管理、使用者沒有權限自己開（需要 IT 協助）。改成「登入時」觸發，登入那一刻就會跑，不再受限於某個固定時間點電腦有沒有登入，見 [ADR-0004](docs/adr/0004-login-triggered-instead-of-fixed-time.md)。
 
 ## 使用方式
 
@@ -70,9 +71,8 @@ python run.py
 
 「工作排程器」→「建立工作」：
 
-- **一般**：勾選「不論使用者登入與否均執行」
-- **觸發程序**：每天 08:00
-- **設定**：勾選「喚醒電腦來執行此工作」
+- **一般**：維持「只有使用者登入時才執行」（除非帳號有「以批次工作登入」權限，見上方架構決策摘要）
+- **觸發程序**：**登入時**（不是固定時間），使用者選帳號本身
 - **動作**：
   - 程式：`C:\Users\john.lin\AppData\Local\Programs\Python\Python312\python.exe`
   - 引數：`run.py`
@@ -103,13 +103,15 @@ C:\Users\john.lin\AppData\Local\Programs\Python\Python312\python.exe run.py
 | `UNATTENDED` | 無 | 設 `1` 時不開瀏覽器、不等按鍵，改成建立 Gmail 草稿 |
 | `GOOGLE_CREDENTIALS_PATH` | `credentials.json` | Gmail OAuth 用戶端憑證檔案路徑 |
 | `GOOGLE_TOKEN_PATH` | `token.json` | Gmail OAuth 授權快取檔案路徑 |
+| `EARLIEST_RUN_HOUR` | `8` | 無人值守模式最早幾點才執行（登入時觸發，用這個擋掉太早的登入） |
+| `LAST_SUCCESS_MARKER_PATH` | `last_success_date.txt` | 記錄「今天已成功執行過」的標記檔路徑，避免同一天登入多次重複建草稿 |
 
 草稿的收件人（`DRAFT_TO`）、副本（`DRAFT_CC`）、主旨格式、內文都寫在 [`pcc_tender_watch/config.py`](pcc_tender_watch/config.py)，要改的話直接編輯那個檔案。
 
 ## 已知限制
 
 - 依賴非官方、社群維運的第三方 API（g0v `pcc-api.openfun.app`），該服務中斷或改版時本程式需要跟著調整，見 [ADR-0001](docs/adr/0001-use-g0v-pcc-api.md)。
-- g0v API 只能在本機（非資料中心 IP）執行，見 [ADR-0002](docs/adr/0002-local-manual-exe-instead-of-cloud-schedule.md)；Windows 工作排程器仍是跑在你的電腦上，只是電腦可以睡眠/沒登入，不是真正的雲端執行。
+- g0v API 只能在本機（非資料中心 IP）執行，見 [ADR-0002](docs/adr/0002-local-manual-exe-instead-of-cloud-schedule.md)；Windows 工作排程器仍是跑在你的電腦上，不是真正的雲端執行，且目前設定仍需要你登入電腦才會觸發（見 [ADR-0004](docs/adr/0004-login-triggered-instead-of-fixed-time.md)）。
 - API 的 Bearer Token 目前需要邀請才能申請，一般使用者拿不到；程式改用請求節流因應，實測穩定，但代表沒有官方保證的流量額度，短時間內密集執行多次可能還是會被限流（429），正常一天執行一次不會有問題。
 - `listbydate` 在完全沒有公告的日期（例如假日）會回傳夾雜 PHP 警告文字的壞掉 JSON（第三方 API 本身的 bug），程式會把那一天當作沒有資料、印警告後跳過，不會讓整次執行失敗。
 - 篩選仍以「標案名稱」關鍵字比對為主，名稱裡完全沒出現任何關鍵字/同義詞的資安相關標案會被漏掉；`detail` 裡官方的「國安/資安疑慮」旗標只用來補標分類，沒有用來擴大候選名單（那需要對每天所有公告都呼叫一次 `/api/tender`，成本太高）。

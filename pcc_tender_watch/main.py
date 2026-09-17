@@ -7,6 +7,10 @@ Enter 才結束（打包成 .exe 雙擊執行時，視窗不會在讀完結果�
 無人值守模式（環境變數 UNATTENDED=1，給 Windows 工作排程器排程用）：不開瀏覽器、
 不等按鍵，改成呼叫 Gmail API 建立一封草稿信（不會寄出，HTML 以附件夾帶）。
 見 docs/adr/0003-unattended-mode-and-gmail-draft.md。
+
+無人值守模式的觸發時機是「登入時」而不是固定時間點（見 docs/adr/0004），所以程式
+自己要判斷「現在該不該真的執行」：還沒到 EARLIEST_RUN_HOUR、今天已經成功執行過、
+或今天是假日，都會直接跳過不執行。
 """
 
 from __future__ import annotations
@@ -155,14 +159,39 @@ def _pause() -> None:
         pass
 
 
+def _read_last_success_date(marker_path: str) -> str | None:
+    if not os.path.exists(marker_path):
+        return None
+    with open(marker_path, "r", encoding="utf-8") as f:
+        return f.read().strip() or None
+
+
+def _write_last_success_date(marker_path: str, date: dt.date) -> None:
+    with open(marker_path, "w", encoding="utf-8") as f:
+        f.write(date.isoformat())
+
+
+def _unattended_skip_reason(now: dt.datetime, marker_path: str) -> str | None:
+    """判斷這次「登入觸發」要不要真的執行；回傳 None 表示要執行。"""
+    if _read_last_success_date(marker_path) == now.date().isoformat():
+        return f"{now.date()} 已經成功執行過一次，這次登入不重複執行。"
+    if now.hour < config.EARLIEST_RUN_HOUR:
+        return f"現在是 {now.strftime('%H:%M')}，還沒到 {config.EARLIEST_RUN_HOUR}:00，暫不執行。"
+    if filters.is_non_working_day(now.date()):
+        return f"{now.date()} 是假日（週末或國定假日），無人值守模式不觸發，直接結束。"
+    return None
+
+
 def main() -> None:
     _fix_windows_console_encoding()
 
     now = dt.datetime.now()
 
-    if config.UNATTENDED and filters.is_non_working_day(now.date()):
-        print(f"{now.date()} 是假日（週末或國定假日），無人值守模式不觸發，直接結束。")
-        return
+    if config.UNATTENDED:
+        skip_reason = _unattended_skip_reason(now, config.LAST_SUCCESS_MARKER_PATH)
+        if skip_reason:
+            print(skip_reason)
+            return
 
     run_time_label = now.strftime("%Y-%m-%d %H:%M")
     print(f"開始查詢，結果會存到：{os.path.abspath(config.OUTPUT_DIR)}（往回掃 {config.LOOKBACK_DAYS} 天，可能需要幾分鐘）")
@@ -192,6 +221,7 @@ def main() -> None:
             attachment_path=path,
         )
         print(f"草稿已建立，Draft ID：{draft_id}")
+        _write_last_success_date(config.LAST_SUCCESS_MARKER_PATH, now.date())
     else:
         webbrowser.open(f"file://{path}")
         _pause()

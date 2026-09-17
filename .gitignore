@@ -9,3 +9,4 @@ dist/
 credentials.json
 token.json
 run_unattended.bat
+last_success_date.txt
