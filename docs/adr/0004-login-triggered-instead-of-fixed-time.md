@@ -9,3 +9,9 @@
 3. 今天是假日（週末或國定假日，見 ADR 前一版邏輯），不執行
 
 失敗（查詢過程出錯）不會寫入成功標記，下次登入仍會重新嘗試，不會被「已經跑過」擋住。
+
+## 補充：只設「登入時」還是沒觸發
+
+改完後隔天實測，「登入時」觸發器完全沒有啟動紀錄——因為使用者日常的模式是電腦睡眠/螢幕鎖定後解鎖，不是真的登出再登入，Windows 把這兩種情況視為不同事件，「At logon」只對應真正的登入，不含解鎖。
+
+補加了第二個觸發條件「**工作站解除鎖定時**」（`TASK_TRIGGER_SESSION_STATE_CHANGE`，`StateChange = TASK_SESSION_UNLOCK`；GUI 上「開始工作」選單裡的 "On workstation unlock"，PowerShell 的 `New-ScheduledTaskTrigger` 沒有對應參數，用 `Schedule.Service` COM API 加）。兩個觸發條件並存（任一個發生都會觸發），靠 `main._unattended_skip_reason` 的「今天已執行過」判斷避免兩個都觸發時重複執行。
