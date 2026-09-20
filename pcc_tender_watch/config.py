@@ -1,5 +1,7 @@
 """這支程式的設定值。沒有任何一項是必填，預設值就能直接跑（見 docs/adr/0002）。"""
 
+from __future__ import annotations
+
 import os
 
 PCC_API_BASE = "https://pcc-api.openfun.app/api"

@@ -3,7 +3,7 @@
 查詢政府電子採購網，找出跟「資安」「網路設備」相關、目前還在投標期限內（尚未決標）的標案。有兩種執行模式：
 
 - **互動模式**：手動雙擊執行，輸出成本機 HTML 檔並自動用瀏覽器打開
-- **無人值守模式**：Windows 工作排程器在**登入電腦時**觸發（不是固定時間點，見 [ADR-0004](docs/adr/0004-login-triggered-instead-of-fixed-time.md)），程式自己判斷現在該不該真的執行——時間要 ≥ 8:00、今天還沒成功執行過、且不是假日（依行政院人事行政總處公告，含週末、國定假日、補假；補班日不算）——都符合才會真的查詢，完成後在 Gmail 建立一封**草稿**（不會寄出），HTML 報表以附件夾帶，收件人 peggy.wu@rehfeldt.org、副本 supportlf@rehfeldt.org
+- **無人值守模式**：由 Synology NAS 的工作排程器每天 08:00 觸發（見 [ADR-0005](docs/adr/0005-run-on-synology-nas.md)；筆電上的 Windows 排程器是「登入/解鎖時」觸發的備援，見 [ADR-0004](docs/adr/0004-login-triggered-instead-of-fixed-time.md)），程式自己判斷現在該不該真的執行——時間要 ≥ 8:00、今天還沒成功執行過、且不是假日（依行政院人事行政總處公告，含週末、國定假日、補假；補班日不算）——都符合才會真的查詢，完成後在 Gmail 建立一封**草稿**（不會寄出），HTML 報表以附件夾帶，收件人 peggy.wu@rehfeldt.org、副本 supportlf@rehfeldt.org
 
 設計決策見 [`CONTEXT.md`](CONTEXT.md)（詞彙定義）與 [`docs/adr/`](docs/adr/)（架構決策記錄）。
 
@@ -91,6 +91,37 @@ C:\Users\john.lin\AppData\Local\Programs\Python\Python312\python.exe run.py
 ```
 
 工作排程器的「動作」直接指向這個 `.bat` 檔即可。
+
+## 在 Synology NAS 上執行（主要方式）
+
+NAS 全年開機、不受登入狀態影響，見 [ADR-0005](docs/adr/0005-run-on-synology-nas.md)。目前部署在 `192.168.1.125` 的 `~/pcc/`（Python 3.8 虛擬環境）。
+
+### 部署（或重新部署）
+
+從有 SSH 金鑰的機器執行（NAS 沒開 SFTP，`scp` 要加 `-O`）：
+
+```bash
+ssh jhlin94228@192.168.1.125 "mkdir -p ~/pcc && chmod 700 ~/pcc"
+scp -O -r pcc_tender_watch run.py run_nas.sh requirements.txt jhlin94228@192.168.1.125:pcc/
+scp -O credentials.json token.json jhlin94228@192.168.1.125:pcc/
+ssh jhlin94228@192.168.1.125 "cd ~/pcc && chmod 600 credentials.json token.json && chmod 755 run_nas.sh && python3 -m venv venv && ./venv/bin/python -m pip install -r requirements.txt"
+```
+
+### DSM 排程設定
+
+「控制台」→「工作排程器」→「新增」→「排程的工作」→「使用者定義的指令碼」：
+
+- **一般**：工作名稱 `PCC Tender Watch`、使用者 `jhlin94228`、已啟用
+- **排程**：每天，開始時間 08:00
+- **工作設定**：執行指令 `/volume1/homes/jhlin94228/pcc/run_nas.sh`
+
+假日、時間、「今天已執行過」的判斷都在程式裡，排程設成每天即可。
+
+### 排查
+
+- 每天的執行紀錄在 NAS 的 `~/pcc/logs/run_YYYYMMDD.log`，只保留 30 天
+- 自己手動跑一次：`ssh jhlin94228@192.168.1.125 ~/pcc/run_nas.sh`（假日會直接跳過）
+- google-auth / cryptography 的 Python 3.8 EOL 警告是預期的，不影響運作
 
 ## 設定（都選填，預設值就能直接跑）
 

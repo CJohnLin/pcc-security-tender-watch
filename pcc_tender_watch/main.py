@@ -19,10 +19,12 @@ import datetime as dt
 import os
 import sys
 import webbrowser
+from typing import Tuple
 
 from . import config, filters, gmail_draft, pcc_client, report
 
-TenderKey = tuple[str, str]
+# 用 typing.Tuple 而不是內建 tuple[...]：這行是執行期運算式，Python 3.8（NAS 上的版本）不支援。
+TenderKey = Tuple[str, str]
 
 
 def _fix_windows_console_encoding() -> None:
